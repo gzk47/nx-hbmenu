@@ -9,7 +9,7 @@ jobs:
     container: devkitpro/devkita64
 
     steps:
-    - name: spliting string
+    - name: Splitting string
       uses: winterjung/split@v2.1.0
       id: repo
       with:
@@ -24,19 +24,24 @@ jobs:
       run: |
         git config --global --add safe.directory `pwd`
         git submodule update --remote 
-        make dist-bin -j $(nproc);
-        ls *.zip|sed "s/v.*\-.*//" |xargs -I {} mv $(ls *.zip) {}.zip
+        make -j $(nproc);
+        if [ -z "$(ls *.nro 2>/dev/null)" ]; then
+          echo "Error: Generated NRO file not found"
+          exit 1
+        fi
+        echo "Generated NRO file: $(ls *.nro)"
         echo "tag_name=$(date +%Y%m%d)" >> $GITHUB_ENV	
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.repo.outputs._1 }} 
-        path: ./*.zip
+        path: ./*.nro
+    
     - name: Upload release
       uses: svenstaro/upload-release-action@v2
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        file: ./*.zip
+        file: ./*.nro
         tag: ${{ env.tag_name }}
         overwrite: true
         file_glob: true
