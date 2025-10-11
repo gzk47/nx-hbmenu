@@ -24,7 +24,7 @@ jobs:
       run: |
         git config --global --add safe.directory `pwd`
         git submodule update --remote 
-        make -j $(nproc);
+        make dist-bin -j $(nproc);
         if [ -z "$(ls *.nro 2>/dev/null)" ]; then
           echo "Error: Generated NRO file not found"
           exit 1
