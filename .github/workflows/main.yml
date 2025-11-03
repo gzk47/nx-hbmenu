@@ -1,21 +1,13 @@
-name: CI/CD Pipeline
+name: Release
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ master ]
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-  pull_request:
-    branches: [ master ]
 
 jobs:
-  build-switch:
-    name: Build Switch Version
+  build:
     runs-on: ubuntu-latest
     container: devkitpro/devkita64
-    
+
     steps:
     - name: Splitting string
       uses: winterjung/split@v2.1.0
@@ -23,91 +15,45 @@ jobs:
       with:
         msg: ${{ github.repository }}
         separator: '/'
-    
     - name: Checkout project
-      uses: actions/checkout@v4
+      uses: actions/checkout@master
       with:
-        ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+        ref: master
         submodules: recursive
-    
-    - name: Setup cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          **/.build
-          **/romfs
-        key: ${{ runner.os }}-build-${{ hashFiles('**/*.c', '**/*.h', '**/*.cpp', 'Makefile*') }}
-        restore-keys: |
-          ${{ runner.os }}-build-
-    
-    - name: Build Switch project
-      id: build
+    - name: Build project
       run: |
         git config --global --add safe.directory `pwd`
-        git submodule update --remote
-        make nx -j $(nproc)
-        make dist-bin -j $(nproc)
+        git submodule update --remote 
+        make dist-bin -j $(nproc);
+        if [ -z "$(ls *.nro 2>/dev/null)" ]; then
+          echo "Error: Generated NRO file not found"
+          exit 1
+        fi
+        echo "Generated NRO file: $(ls *.nro)"
+        for file in *.nro; do
+          new_name=$(echo "$file" | sed 's/nx-//')
+          mv "$file" "$new_name"
+          echo "Renamed: $file -> $new_name"
+        done
         APP_VERSION=$(grep "export APP_VERSION" Makefile | head -1 | cut -d'=' -f2- | tr -d ' \t')
         if [[ "$APP_VERSION" == *"-"* ]]; then
           VERSION=$(echo "$APP_VERSION" | cut -d'-' -f1)
         else
           VERSION="$APP_VERSION"
         fi
-        echo "app_version=$VERSION" >> $GITHUB_ENV
-        if [ -z "$(ls *.nro 2>/dev/null)" ]; then
-          echo "Error: Generated NRO file not found"
-          exit 1
-        fi
-        for file in *.nro; do
-          new_name=$(echo "$file" | sed 's/nx-//')
-          mv "$file" "$new_name"
-        done
-        echo "nro_file=$(ls *.nro)" >> $GITHUB_OUTPUT
-    
-    - name: Upload Switch artifacts
+        echo "tag_name=$VERSION" >> $GITHUB_ENV	
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ steps.repo.outputs._1 }}-switch
+        name: ${{ steps.repo.outputs._1 }} 
         path: ./*.nro
-
-
-
-  release:
-    name: Create Release
-    needs: [build-switch]
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Download Switch artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: ${{ github.event.repository.name }}-switch
-        path: ./release
-    
-    - name: Generate release notes
-      id: notes
-      run: |
-        if [ -n "${{ env.app_version }}" ]; then
-          echo "release_tag=${{ env.app_version }}" >> $GITHUB_ENV
-        elif [ -n "${{ github.event_name == 'push' && github.ref_name || '' }}" ]; then
-          echo "release_tag=${{ github.ref_name }}" >> $GITHUB_ENV
-        else
-          echo "release_tag=$(date +%Y%m%d)" >> $GITHUB_ENV
-        fi
-        echo "## ${{ env.release_tag }}" > release_notes.md
-        echo "\nAuto-built version." >> release_notes.md
-        echo "\n### File list" >> release_notes.md
-        find ./release -type f -name "*" | sort | sed 's/^\.\/release\///' | sed 's/^/\- /' >> release_notes.md
     
     - name: Upload release
-      uses: softprops/action-gh-release@v1
+      uses: svenstaro/upload-release-action@v2
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        files: ./release/*.nro
-        tag_name: ${{ env.release_tag }}
-        name: hbmenu v${{ env.release_tag }}
-        body_path: release_notes.md
-        draft: false
-        prerelease: false
+        file: ./*.nro
+        tag: ${{ env.tag_name }}
+        name: hbmenu v${{ env.tag_name }}
         overwrite: true
+        file_glob: true
