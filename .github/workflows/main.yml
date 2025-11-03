@@ -1,0 +1,152 @@
+name: CI/CD Pipeline
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-switch:
+    name: Build Switch Version
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64
+    
+    steps:
+    - name: Splitting string
+      uses: winterjung/split@v2.1.0
+      id: repo
+      with:
+        msg: ${{ github.repository }}
+        separator: '/'
+    
+    - name: Checkout project
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+        submodules: recursive
+    
+    - name: Setup cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          **/.build
+          **/romfs
+        key: ${{ runner.os }}-build-${{ hashFiles('**/*.c', '**/*.h', '**/*.cpp', 'Makefile*') }}
+        restore-keys: |
+          ${{ runner.os }}-build-
+    
+    - name: Build Switch project
+      id: build
+      run: |
+        git config --global --add safe.directory `pwd`
+        git submodule update --remote
+        make nx -j $(nproc)
+        make dist-bin -j $(nproc)
+        if [ -z "$(ls *.nro 2>/dev/null)" ]; then
+          echo "Error: Generated NRO file not found"
+          exit 1
+        fi
+        for file in *.nro; do
+          new_name=$(echo "$file" | sed 's/nx-//')
+          mv "$file" "$new_name"
+        done
+        echo "tag_name=$(date +%Y%m%d)" >> $GITHUB_ENV
+        echo "nro_file=$(ls *.nro)" >> $GITHUB_OUTPUT
+    
+    - name: Upload Switch artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.repo.outputs._1 }}-switch
+        path: ./*.nro
+
+  build-pc:
+    name: Build PC Version
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout project
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+        submodules: recursive
+    
+    - name: Setup cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          **/.build
+          **/romfs
+        key: ${{ runner.os }}-build-pc-${{ hashFiles('**/*.c', '**/*.h', '**/*.cpp', 'Makefile*') }}
+        restore-keys: |
+          ${{ runner.os }}-build-pc-
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential libfreetype6-dev libsdl2-dev libconfig-dev libphysfs-dev
+    
+    - name: Build PC project
+      id: build-pc
+      run: |
+        make pc -j $(nproc)
+        if [ ! -f "hbmenu" ] && [ ! -f "hbmenu.exe" ]; then
+          echo "Warning: Generated PC executable not found"
+        fi
+    
+    - name: Upload PC artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ github.event.repository.name }}-pc
+        path: |
+          hbmenu
+          hbmenu.exe
+        if-no-files-found: ignore
+
+  release:
+    name: Create Release
+    needs: [build-switch, build-pc]
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download Switch artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ github.event.repository.name }}-switch
+        path: ./release
+    
+    - name: Download PC artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ github.event.repository.name }}-pc
+        path: ./release
+    
+    - name: Generate release notes
+      id: notes
+      run: |
+        if [ -n "${{ github.event_name == 'push' && github.ref_name || '' }}" ]; then
+          echo "release_tag=${{ github.ref_name }}" >> $GITHUB_ENV
+        else
+          echo "release_tag=$(date +%Y%m%d)" >> $GITHUB_ENV
+        fi
+        echo "## ${{ env.release_tag }}" > release_notes.md
+        echo "\nAuto-built version." >> release_notes.md
+        echo "\n### File list" >> release_notes.md
+        find ./release -type f -name "*" | sort | sed 's/^\.\/release\///' | sed 's/^/\- /' >> release_notes.md
+    
+    - name: Upload release
+      uses: softprops/action-gh-release@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        files: ./release/*
+        tag_name: ${{ env.release_tag }}
+        name: Release ${{ env.release_tag }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+        overwrite: true
