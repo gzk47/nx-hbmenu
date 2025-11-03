@@ -49,11 +49,12 @@ jobs:
         path: ./*.nro
     
     - name: Upload release
-      uses: svenstaro/upload-release-action@v2
+      uses: softprops/action-gh-release@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        file: ./*.nro
-        tag: ${{ env.tag_name }}
+        files: ./*.nro
+        tag_name: ${{ env.tag_name }}
         name: hbmenu v${{ env.tag_name }}
+        draft: false
+        prerelease: false
         overwrite: true
-        file_glob: true
