@@ -1,0 +1,80 @@
+name: Release-20251117
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:latest
+
+    steps:
+    - name: Update system packages
+      run: |
+        sudo -n apt-get update
+        sudo -n apt-get upgrade -y git build-essential
+      shell: bash
+
+    - name: Clone and install latest libnx
+      run: |
+        git config --global --add safe.directory "*"
+        git clone --recurse-submodules https://github.com/switchbrew/libnx.git
+        cd libnx
+        make install -j$(nproc)
+      shell: bash
+
+    - name: Splitting string
+      uses: winterjung/split@v2.1.0
+      id: repo
+      with:
+        msg: ${{ github.repository }}
+        separator: '/'
+
+    - name: Checkout project
+      uses: actions/checkout@master
+      with:
+        ref: master
+        submodules: recursive
+
+    - name: Build project
+      run: |
+        git config --global --add safe.directory `pwd` && \
+        sudo dkp-pacman -S --noconfirm switch-freetype && \
+        export PKG_CONFIG_PATH=/opt/devkitpro/portlibs/switch/lib/pkgconfig && \
+        git submodule update --remote && \
+        make dist-bin -j $(nproc);
+        if [ -z "$(ls *.nro 2>/dev/null)" ]; then
+          echo "Error: Generated NRO file not found"
+          exit 1
+        fi
+        echo "Generated NRO file: $(ls *.nro)"
+        for file in *.nro; do
+          new_name=$(echo "$file" | sed 's/nx-//')
+          mv "$file" "$new_name"
+          echo "Renamed: $file -> $new_name"
+        done
+        APP_VERSION=$(grep "export APP_VERSION" Makefile | head -1 | cut -d'=' -f2- | tr -d ' \t')
+        if [[ "$APP_VERSION" == *"-"* ]]; then
+          VERSION=$(echo "$APP_VERSION" | cut -d'-' -f1)
+        else
+          VERSION="$APP_VERSION"
+        fi
+        echo "tag_name=$VERSION" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.repo.outputs._1 }}
+        path: ./*.nro
+    
+    - name: Upload release
+      uses: softprops/action-gh-release@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        files: ./*.nro
+        tag_name: ${{ env.tag_name }}
+        name: hbmenu v${{ env.tag_name }}
+        draft: false
+        prerelease: false
+        overwrite: true
