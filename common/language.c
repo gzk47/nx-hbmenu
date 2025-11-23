@@ -985,5 +985,49 @@ const char* const g_strings[StrId_Max][17] =
             "This application does not support the current ABI.\n"
             "Expect compatibility issues.\n"
         ),
+        STR_ES(
+            "Esta aplicación no admite el ABI actual.\n"
+            "Se esperan problemas de compatibilidad.\n"
+        ),
+        STR_DE(
+            "Diese Anwendung unterstützt die aktuelle ABI nicht.\n"
+            "Kompatibilitätsprobleme werden erwartet.\n"
+        ),
+        STR_FR(
+            "Cette application ne prend pas en charge l'ABI actuel.\n"
+            "Des problèmes de compatibilité sont à prévoir.\n"
+        ),
+        STR_IT(
+            "Questa applicazione non supporta l'ABI corrente.\n"
+            "Si prevedono problemi di compatibilità.\n"
+        ),
+        STR_JP(
+            "このアプリケーションは現在の ABI をサポートしていません。\n"
+            "互換性の問題が発生する可能性があります。\n"
+        ),
+        STR_KO(
+            "이 애플리케이션은 현재 ABI를 지원하지 않습니다.\n"
+            "호환성 문제가 발생할 수 있습니다.\n"
+        ),
+        STR_PT(
+            "Esta aplicação não suporta o ABI atual.\n"
+            "Esperem-se problemas de compatibilidade.\n"
+        ),
+        STR_NL(
+            "Deze applicatie ondersteunt de huidige ABI niet.\n"
+            "Verwachts compatibiliteitsproblemen.\n"
+        ),
+        STR_RU(
+            "Это приложение не поддерживает текущий ABI.\n"
+            "Ожидайте проблемы с совместимостью.\n"
+        ),
+        STR_ZH_HANS(
+            "此应用不支持当前的 ABI 版本。\n"
+            "可能会出现兼容性问题。\n"
+        ),
+        STR_ZH_HANT(
+            "此應用不支援目前的 ABI 版本。\n"
+            "可能會出現相容性問題。\n"
+        ),
     },
 };
